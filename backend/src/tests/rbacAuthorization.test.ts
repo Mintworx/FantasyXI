@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import express, { Request, Response, NextFunction, Router } from "express";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
-import { signAccessToken } from "../config/jwt.js";
+import { signAccessToken, verifyAccessToken } from "../config/jwt.js";
 import {
   Permission,
   Role,
@@ -385,7 +385,12 @@ describe("Unauthorized access attempts (HTTP)", () => {
 
   it("rejects tampered tokens", async () => {
     const token = tokenFor(UserRole.ADMIN);
-    const tampered = token.slice(0, -2) + (token.endsWith("aa") ? "bb" : "aa");
+    const parts = token.split(".");
+    const signature = Buffer.from(parts[2], "base64url");
+    signature[0] ^= 1;
+    parts[2] = signature.toString("base64url");
+    const tampered = parts.join(".");
+    assert.throws(() => verifyAccessToken(tampered), /signature/i);
     const res = await call("POST", "/admin/sync/bootstrap", { Authorization: `Bearer ${tampered}` });
     assert.equal(res.status, 401);
   });
