@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { requireAuth, requirePermission } from "../middleware/authMiddleware.js";
 import { Permission } from "../config/permissions.js";
-import { authenticatedRateLimiter } from "../middleware/rateLimiter.js";
+import { authRateLimiter, authenticatedRateLimiter } from "../middleware/rateLimiter.js";
 import { privacyService } from "../services/privacy/privacyService.js";
 const router = Router();
+// Bound unauthenticated probes before JWT/session/tombstone database checks.
+router.use(authRateLimiter);
 router.use(requireAuth, authenticatedRateLimiter, requirePermission(Permission.PROFILE_UPDATE_OWN));
 router.post("/exports", async (req,res) => {
   try { res.status(202).json({ success:true, data:await privacyService.request(req.user!.id,"EXPORT",req.body?.publicKey) }); }
