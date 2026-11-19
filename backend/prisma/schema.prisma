@@ -156,6 +156,9 @@ enum FinancialAuditAction {
 /// A registered user on the platform.
 /// Laravel equivalent: the `users` table you'd create with `php artisan make:auth`.
 model User {
+  privacyJobs PrivacyJob[]
+  privacyErasedAccount PrivacyErasedAccount?
+
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String?  @map("password_hash")
@@ -1428,4 +1431,28 @@ model SuspensionAppeal {
   @@index([flagId])
   @@index([accountId, status])
   @@map("suspension_appeals")
+}
+
+model PrivacyJob {
+  id String @id @db.Uuid
+  userId String @map("user_id")
+  kind String
+  status String @default("PENDING")
+  publicKey String? @map("public_key")
+  objectKey String? @map("object_key")
+  attempts Int @default(0)
+  errorCode String? @map("error_code")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  expiresAt DateTime @default(dbgenerated("now() + interval '24 hours'")) @map("expires_at") @db.Timestamptz(6)
+  user User @relation(fields:[userId],references:[id])
+  @@index([userId,createdAt(sort:Desc)],map:"privacy_jobs_owner")
+  @@index([status,updatedAt],map:"privacy_jobs_pending")
+  @@map("privacy_jobs")
+}
+model PrivacyErasedAccount {
+  userId String @id @map("user_id")
+  erasedAt DateTime @default(now()) @map("erased_at") @db.Timestamptz(6)
+  user User @relation(fields:[userId],references:[id])
+  @@map("privacy_erased_accounts")
 }

@@ -83,6 +83,9 @@ export class SecurityAnomalyLog {
   public clear(): void {
     this.entries = [];
   }
+  public eraseUser(userId: string): void {
+    this.entries = this.entries.filter(entry => entry.userId !== userId);
+  }
 }
 
 export const securityAnomalyLog = new SecurityAnomalyLog();

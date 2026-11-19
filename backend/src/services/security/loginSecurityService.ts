@@ -144,6 +144,27 @@ export class LoginSecurityService {
   public setRedisClient(client: IRedisCacheClient | null): void {
     this.redis = client;
   }
+  /** Erases this account's login baselines/challenges; never deletes another user's keys. */
+  public async forgetUser(userId: string, email: string): Promise<void> {
+    const exact = [`${KNOWN_DEVICE_PREFIX}${userId}`,`${LAST_LOGIN_PREFIX}${userId}`,`${FAILED_LOGIN_PREFIX}${email}`];
+    for (const key of exact) this.cache.delete(key);
+    for (const [key,entry] of this.cache) {
+      if (key.startsWith(CHALLENGE_PREFIX) && JSON.parse(entry.value).userId === userId) this.cache.delete(key);
+    }
+    if (!this.redis) return;
+    await this.redis.del(...exact);
+    const shared = this.redis as IRedisCacheClient & { scan?: (cursor: string,...args: string[]) => Promise<[string,string[]]> };
+    if (!shared.scan) throw new Error("Login cache does not support bounded erasure");
+    let cursor = "0"; const deadline = Date.now()+30_000;
+    do {
+      const page = await shared.scan(cursor,"MATCH",`${CHALLENGE_PREFIX}*`,"COUNT","100"); cursor=page[0];
+      for (const key of page[1]) {
+        const value=await shared.get(key);
+        if (value && JSON.parse(value).userId===userId) await shared.del(key);
+      }
+      if (Date.now()>deadline) throw new Error("Login cache erasure requires retry");
+    } while(cursor!=="0");
+  }
 
   private async readJson<T>(key: string): Promise<T | null> {
     if (this.redis) {

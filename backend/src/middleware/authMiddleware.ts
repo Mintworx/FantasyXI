@@ -15,6 +15,7 @@ import {
 } from "../config/serviceAuth.js";
 import { AuthUser, UserRole } from "../types/index.js";
 import { setRlsContext } from "../config/db.js";
+import { accountErased } from "../services/privacy/accountStatus.js";
 
 /**
  * Global declaration merging to extend Express Request with authenticated user.
@@ -109,6 +110,12 @@ export async function requireAuth(
         return;
       }
       req.sessionId = payload.sessionId as string;
+    }
+
+    const erased = accountErased(payload.userId);
+    if ((typeof erased === "boolean" ? erased : await erased)) {
+      res.status(401).json({ success:false, message:"Account is no longer available." });
+      return;
     }
 
     req.user = {
@@ -308,6 +315,8 @@ export async function optionalAuth(
     try {
       const payload = verifyAccessToken(parts[1]);
       if (payload.userId) {
+        const erased = accountErased(payload.userId);
+        if ((typeof erased === "boolean" ? erased : await erased)) { next(); return; }
         req.user = {
           id: payload.userId,
           email: payload.email || "",
