@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import {
   register,
   login,
@@ -34,7 +35,8 @@ import {
 } from "../middleware/rateLimiter.js";
 
 const router = Router();
-router.get("/security-activity", requireAuth, authenticatedRateLimiter, requirePermission(Permission.PROFILE_READ), async (req, res) => {
+const securityActivityRateLimiter = rateLimit({windowMs:60_000,max:60,standardHeaders:true,legacyHeaders:false});
+router.get("/security-activity", securityActivityRateLimiter, requireAuth, authenticatedRateLimiter, requirePermission(Permission.PROFILE_READ), async (req, res) => {
   res.json({ success: true, data: await readOwnSecurityActivity(req.user!.id) });
 });
 
@@ -65,7 +67,7 @@ router.get(
 router.get("/google", authRateLimiter, initiateGoogleAuth);
 
 // GET /api/v1/auth/google/callback (Handles Google OAuth callback for sign-in and linking)
-router.get("/google/callback", handleGoogleCallback);
+router.get("/google/callback", authRateLimiter, handleGoogleCallback);
 
 // POST /api/v1/auth/google/link (Protected: returns a short-lived URL that starts linking)
 router.post("/google/link", requireAuth, requirePermission(Permission.PROFILE_UPDATE_OWN), createGoogleLinkTicket);
