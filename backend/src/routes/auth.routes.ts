@@ -27,12 +27,16 @@ import {
 } from "../controllers/auth.controller.js";
 import { requireAuth, requirePermission } from "../middleware/authMiddleware.js";
 import { Permission } from "../types/index.js";
+import { readOwnSecurityActivity } from "../services/security/loginActivityStore.js";
 import {
   authRateLimiter,
   authenticatedRateLimiter,
 } from "../middleware/rateLimiter.js";
 
 const router = Router();
+router.get("/security-activity", requireAuth, authenticatedRateLimiter, requirePermission(Permission.PROFILE_READ), async (req, res) => {
+  res.json({ success: true, data: await readOwnSecurityActivity(req.user!.id) });
+});
 
 // POST /api/v1/auth/register
 router.post("/register", authRateLimiter, register);
