@@ -7,7 +7,7 @@ import { verifyFinancialProof } from "../services/audit/financialMerkle.js";
 
 const url=process.env.FANTASY_TEST_DATABASE_URL;
 test("PostgreSQL financial capture, proof publication/retry and out-of-band tamper detection",{skip:!url},async()=>{
-  const parsed=new URL(url!);assert.equal(parsed.hostname,"127.0.0.1");assert.match(parsed.pathname,/^\/fantasy_451(?:_v\d+)?$/);
+  const parsed=new URL(url!);assert.equal(parsed.hostname,"127.0.0.1");assert.match(parsed.pathname,/^\/fantasy_(?:451(?:_v\d+)?|combined)$/);
   const client=new pg.Client({connectionString:url,connectionTimeoutMillis:3000});await client.connect();
   let failInsert=false,alerts=0;const published=new Map<string,PublicRoot>();
   const sql=(parts:TemplateStringsArray,values:unknown[])=>parts.reduce((all,part,index)=>all+(index?`$${index}`:"")+part,"");

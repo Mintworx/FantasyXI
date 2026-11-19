@@ -7,7 +7,7 @@ import { accountErased } from "../services/privacy/accountStatus.js";
 
 const url=process.env.FANTASY_TEST_DATABASE_URL;
 test("PostgreSQL export/erasure isolates users, encrypts archives, revokes access and preserves financial history",{skip:!url},async()=>{
-  const location=new URL(url!);assert.equal(location.hostname,"127.0.0.1");assert.equal(location.pathname,"/fantasy_454");
+  const location=new URL(url!);assert.equal(location.hostname,"127.0.0.1");assert.ok(["/fantasy_454","/fantasy_combined"].includes(location.pathname));
   assert.equal(process.env.DATABASE_URL,url);
   const id=randomUUID(),other=randomUUID();
   const objects=new Map<string,Buffer>();const deleted:string[]=[];let failUpload=true;

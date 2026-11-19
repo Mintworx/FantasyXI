@@ -9,7 +9,7 @@ import { AuthService } from "../services/auth/authService.js";
 
 const url=process.env.FANTASY_TEST_DATABASE_URL;
 test("login holds issue no token, successful email verification persists trusted location and own history",{skip:!url},async()=>{
-  const location=new URL(url!);assert.equal(location.hostname,"127.0.0.1");assert.equal(location.pathname,"/fantasy_453");assert.equal(process.env.DATABASE_URL,url);
+  const location=new URL(url!);assert.equal(location.hostname,"127.0.0.1");assert.ok(["/fantasy_453","/fantasy_combined"].includes(location.pathname));assert.equal(process.env.DATABASE_URL,url);
   let now=Date.now();const messages:string[]=[];const id=randomUUID(),other=randomUUID();
   const security=new LoginSecurityService({redis:null,anomalyChallenges:true,activity:loginActivityStore,now:()=>now,travelPolicy:{maxSpeedKmh:800,toleranceKm:0},mailer:{send:async message=>{messages.push(message.text);}}});
   const auth=new AuthService(prisma,undefined,security);
