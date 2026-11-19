@@ -19,6 +19,7 @@ import { replicaReads } from "../middleware/readConsistency.js";
 import { getProofOfReserve } from "../controllers/financial.controller.js";
 import { fplDataFreshness } from "../middleware/fplDataFreshness.js";
 import financialMerkleRoutes from "./financialMerkle.routes.js";
+import privacyRoutes from "./privacy.routes.js";
 
 /**
  * Main API v1 router.
@@ -27,6 +28,7 @@ import financialMerkleRoutes from "./financialMerkle.routes.js";
  */
 const apiV1Router = Router();
 apiV1Router.use("/financial-audit", financialMerkleRoutes);
+apiV1Router.use("/privacy",privacyRoutes);
 
 apiV1Router.use("/auth", authRoutes);
 apiV1Router.use("/admin/sync", syncRoutes);
