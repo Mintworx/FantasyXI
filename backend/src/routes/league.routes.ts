@@ -24,7 +24,7 @@ import {
 } from "../controllers/league.controller.js";
 import { requireAuth, requirePermission, optionalAuth, requireCurrentRole } from "../middleware/authMiddleware.js";
 import { Permission, UserRole } from "../types/index.js";
-import { authenticatedRateLimiter, mutationRateLimiter } from "../middleware/rateLimiter.js";
+import { authenticatedRateLimiter, mutationRateLimiter, authorizationRateLimiter } from "../middleware/rateLimiter.js";
 import { primaryReads } from "../middleware/readConsistency.js";
 import { getChatMessages, postChatMessage } from "../controllers/chat.controller.js";
 import { requireDepositRangeProof } from "../middleware/depositRangeProof.js";
@@ -37,6 +37,7 @@ const requireLeagueOwner: RequestHandler = async (req,res,next) => {
   next();
 };
 const router = Router();
+router.use(authorizationRateLimiter);
 
 // POST /api/v1/leagues (Protected: creator identity derived from token)
 router.post("/", requireAuth, authenticatedRateLimiter, mutationRateLimiter, requirePermission(Permission.LEAGUE_CREATE), createLeague);

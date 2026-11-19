@@ -6,7 +6,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import app from "./app.js";
 import { startJobQueue, stopJobQueue, getQueueHealth } from "./queues/jobQueue.js";
-import { apiRateLimiter } from "./middleware/rateLimiter.js";
+import { apiRateLimiter, authorizationRateLimiter } from "./middleware/rateLimiter.js";
 import { optionalAuth } from "./middleware/authMiddleware.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { requireAuth, requirePermission } from "./middleware/authMiddleware.js";
@@ -211,6 +211,7 @@ async function startServer(): Promise<void> {
   await apolloServer.start();
   app.use(
     "/graphql",
+    authorizationRateLimiter,
     requireAuth,
     // Owner and current-role authorization must not use a lagging replica.
     primaryReads,

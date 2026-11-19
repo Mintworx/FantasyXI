@@ -31,10 +31,12 @@ import { Permission } from "../types/index.js";
 import { readOwnSecurityActivity } from "../services/security/loginActivityStore.js";
 import {
   authRateLimiter,
+  authorizationRateLimiter,
   authenticatedRateLimiter,
 } from "../middleware/rateLimiter.js";
 
 const router = Router();
+router.use(authorizationRateLimiter);
 const securityActivityRateLimiter = rateLimit({windowMs:60_000,max:60,standardHeaders:true,legacyHeaders:false});
 router.get("/security-activity", securityActivityRateLimiter, requireAuth, authenticatedRateLimiter, requirePermission(Permission.PROFILE_READ), async (req, res) => {
   res.json({ success: true, data: await readOwnSecurityActivity(req.user!.id) });

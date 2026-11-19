@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import apiV1Router from "./routes/index.js";
-import { apiRateLimiter } from "./middleware/rateLimiter.js";
+import { apiRateLimiter, authorizationRateLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { getJwks } from "./controllers/auth.controller.js";
 import { requireAuth, requirePermission } from "./middleware/authMiddleware.js";
@@ -130,7 +130,7 @@ app.get("/api/health", (req: Request, res: Response) => {
  * GET /api/v1/admin/tenants - List all active tenants (admin only)
  * Requires authentication with ADMIN role
  */
-app.get("/api/v1/admin/tenants", requireAuth, requirePermission(Permission.SECURITY_REVIEW), async (_req: Request, res: Response) => {
+app.get("/api/v1/admin/tenants", authorizationRateLimiter, requireAuth, requirePermission(Permission.SECURITY_REVIEW), async (_req: Request, res: Response) => {
   try {
     const { listActiveTenants } = await import(
       "./services/tenantContextService.js"
@@ -154,7 +154,7 @@ app.get("/api/v1/admin/tenants", requireAuth, requirePermission(Permission.SECUR
  * GET /api/v1/admin/tenant-stats - Get tenant boundary violation statistics
  * Shows security audit data for the last 24 hours
  */
-app.get("/api/v1/admin/tenant-stats", requireAuth, requirePermission(Permission.SECURITY_REVIEW), async (_req: Request, res: Response) => {
+app.get("/api/v1/admin/tenant-stats", authorizationRateLimiter, requireAuth, requirePermission(Permission.SECURITY_REVIEW), async (_req: Request, res: Response) => {
   try {
     const { getTenantBoundaryStats } = await import(
       "./middleware/tenantBoundary.js"
@@ -177,7 +177,7 @@ app.get("/api/v1/admin/tenant-stats", requireAuth, requirePermission(Permission.
  * POST /api/v1/admin/tenants - Create a new tenant (admin only)
  * Request body: { tier: 'ENTERPRISE' | 'SPONSORED', displayName: string }
  */
-app.post("/api/v1/admin/tenants", requireAuth, requirePermission(Permission.SECURITY_REVIEW), async (req: Request, res: Response) => {
+app.post("/api/v1/admin/tenants", authorizationRateLimiter, requireAuth, requirePermission(Permission.SECURITY_REVIEW), async (req: Request, res: Response) => {
   try {
     const { tier, displayName } = req.body;
 

@@ -1,5 +1,7 @@
 # Security/privacy issue batch: #451, #452, #453, #454
 
+Integrated tenant, auth, league, audit and GraphQL entry points apply a fixed-window authorization-probe budget before database-backed JWT/session/current-role checks. `AUTHORIZATION_RATE_LIMIT_MAX` defaults to 120 requests per IP per minute; existing stricter sign-in and authenticated mutation limits still apply. This bounds the new account-erasure/current-role lookups separately from the existing general API sliding-window limiter. Use the documented trusted-proxy/origin restrictions so client IP evidence is reliable.
+
 The integration branch merges the four independent issue branches with merge commits. It preserves the full effective baseline test list and adds every feature's tests plus a PostgreSQL integration case covering their interaction. Both financial and privacy background jobs/API routers, all new database models/User relations, permissions telemetry and erased-account checks are retained together. Each feature's deployment contract is documented separately:
 
 - `financial-merkle-audit.md`: pgcrypto migration, independently operated append-only public log, hourly publication and critical verification alerts.
