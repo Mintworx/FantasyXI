@@ -156,6 +156,9 @@ enum FinancialAuditAction {
 /// A registered user on the platform.
 /// Laravel equivalent: the `users` table you'd create with `php artisan make:auth`.
 model User {
+  loginSecurityActivity LoginSecurityActivity[]
+  loginTrustedLocations LoginTrustedLocation[]
+
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String?  @map("password_hash")
@@ -1428,4 +1431,29 @@ model SuspensionAppeal {
   @@index([flagId])
   @@index([accountId, status])
   @@map("suspension_appeals")
+}
+
+model LoginSecurityActivity {
+  id String @id @db.Uuid
+  userId String @map("user_id")
+  ip String
+  browser String
+  device String
+  latitude Float?
+  longitude Float?
+  asn String?
+  outcome String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@index([userId,createdAt(sort:Desc)],map:"login_security_activity_owner_time")
+  @@map("login_security_activity")
+}
+model LoginTrustedLocation {
+  userId String @map("user_id")
+  latitude Float
+  longitude Float
+  verifiedAt DateTime @map("verified_at") @db.Timestamptz(6)
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@id([userId,latitude,longitude])
+  @@map("login_trusted_locations")
 }
