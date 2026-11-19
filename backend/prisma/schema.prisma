@@ -1429,3 +1429,25 @@ model SuspensionAppeal {
   @@index([accountId, status])
   @@map("suspension_appeals")
 }
+
+model FinancialMerkleEntry {
+  sequence BigInt @id
+  auditId String @unique @map("audit_id")
+  transactionId String? @map("transaction_id")
+  payloadText String @map("payload_text")
+  previousHash String @map("previous_hash") @db.Char(64)
+  hash String @unique @db.Char(64)
+  capturedAt DateTime @default(dbgenerated("clock_timestamp()")) @map("captured_at") @db.Timestamptz(6)
+  @@index([transactionId,sequence], map:"financial_merkle_transaction")
+  @@map("financial_merkle_entries")
+}
+model FinancialMerkleRoot {
+  hour DateTime @id @db.Timestamptz(6)
+  firstSequence BigInt @map("first_sequence")
+  lastSequence BigInt @map("last_sequence")
+  entryCount Int @map("entry_count")
+  root String @db.Char(64)
+  receipt String
+  publishedAt DateTime @default(dbgenerated("clock_timestamp()")) @map("published_at") @db.Timestamptz(6)
+  @@map("financial_merkle_roots")
+}
