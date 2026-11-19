@@ -15,6 +15,7 @@ import {
 } from "../config/serviceAuth.js";
 import { AuthUser, UserRole } from "../types/index.js";
 import { setRlsContext } from "../config/db.js";
+import { recordPermissionDenial } from "../services/security/authorizationTelemetry.js";
 
 /**
  * Global declaration merging to extend Express Request with authenticated user.
@@ -186,6 +187,7 @@ export function requireRole(...allowedRoles: Role[]): (
     }
 
     if (!permitted.has(req.user.role)) {
+      recordPermissionDenial(req, "role", allowedRoles);
       res.status(403).json({
         success: false,
         message: "You do not have permission to perform this action.",
@@ -214,6 +216,25 @@ const resolveRoleFromDatabase: RoleResolver = async (userId) => {
 };
 
 let defaultRoleResolver: RoleResolver = resolveRoleFromDatabase;
+
+/** Routed privileged operations recheck current authority, not a stale JWT role. */
+export function requireCurrentRole(...allowedRoles: Role[]) {
+  const guard = requireRole(...allowedRoles);
+  return async function currentRoleGuard(req: Request, res: Response, next: NextFunction): Promise<void> {
+    if (!req.user || !allowedRoles.includes(req.user.role) || req.user.role === Role.SERVICE) {
+      guard(req, res, next);
+      return;
+    }
+    const currentRole = await defaultRoleResolver(req.user.id);
+    if (!currentRole || !allowedRoles.includes(currentRole)) {
+      recordPermissionDenial(req, "current-role", allowedRoles);
+      res.status(403).json({ success: false, message: "You do not have permission to perform this action." });
+      return;
+    }
+    req.user.role = currentRole;
+    next();
+  };
+}
 
 /**
  * Replaces the role lookup used by `requirePermission` (tests without a
@@ -254,6 +275,7 @@ export function createPermissionGuard(resolveRole?: RoleResolver) {
       }
 
       const forbid = () => {
+        recordPermissionDenial(req, "permission", permissions);
         res.status(403).json({
           success: false,
           message: "You do not have permission to perform this action.",

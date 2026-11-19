@@ -13,6 +13,7 @@
  */
 
 export enum SecurityAnomalyType {
+  PERMISSION_DENIED = "PERMISSION_DENIED",
   FAILED_LOGIN_SPIKE = "FAILED_LOGIN_SPIKE",
   NEW_DEVICE_LOGIN = "NEW_DEVICE_LOGIN",
   /** Successive logins further apart than any traveller could cover (issue #331) */
