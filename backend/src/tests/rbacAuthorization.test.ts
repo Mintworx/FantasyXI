@@ -221,6 +221,8 @@ describe("Route authorization audit", () => {
     // Credential-proven sign-in/session exchanges do not yet have bearer access.
     "POST /auth/refresh", "POST /auth/logout",
     "POST /auth/webauthn/login/options", "POST /auth/webauthn/login/verify",
+    // Recovery precedes bearer access; completion verifies a one-time Ed25519 proof.
+    "POST /auth/webauthn/recovery/begin", "POST /auth/webauthn/recovery/complete",
     "GET /auth/google/link/start",
     // Existing public match and player statistics, with no privileged mutations.
     "POST /players/batch-stats", "GET /players/:id/analytics", "GET /squads/:id/value",
@@ -300,7 +302,7 @@ describe("Route authorization audit", () => {
   });
 
   it("keeps every public route read-only apart from sign-up and sign-in", () => {
-    const SIGN_IN_ROUTES = new Set(["POST /auth/register", "POST /auth/login", "POST /auth/login/verify", "POST /auth/refresh", "POST /auth/logout", "POST /auth/webauthn/login/options", "POST /auth/webauthn/login/verify", "POST /players/batch-stats"]);
+    const SIGN_IN_ROUTES = new Set(["POST /auth/register", "POST /auth/login", "POST /auth/login/verify", "POST /auth/refresh", "POST /auth/logout", "POST /auth/webauthn/login/options", "POST /auth/webauthn/login/verify", "POST /auth/webauthn/recovery/begin", "POST /auth/webauthn/recovery/complete", "POST /players/batch-stats"]);
     const mutatingPublic = [...PUBLIC_ROUTES].filter((key) => !key.startsWith("GET ") && !SIGN_IN_ROUTES.has(key));
     assert.deepEqual(mutatingPublic, []);
   });

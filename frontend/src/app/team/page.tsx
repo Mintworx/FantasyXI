@@ -7,6 +7,13 @@ import { api, ApiError } from "@/lib/api";
 import { isOfflineError, loadSquadSnapshot, saveSquadSnapshot } from "@/lib/offlineStore";
 import { flushOfflineQueue } from "@/lib/offlineSyncCoordinator";
 import {
+  resolveTransferConflicts,
+  subscribeTransferConflicts,
+  type JournalSyncOutcome,
+} from "@/lib/transferJournalSync";
+import type { MergeResolutionMap } from "@/lib/mergeResolver";
+import { TransferConflictModal } from "@/components/team/TransferConflictModal";
+import {
   enqueueSquadMutation,
   getQueuedMutations,
   getQueuedMutationCount,
@@ -20,6 +27,7 @@ import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { Squad, Player, Position, SQUAD_RULES, ChipType, SquadChipUsage } from "@/types";
 import { Pitch } from "@/components/pitch/Pitch";
 import { Bench } from "@/components/pitch/Bench";
+import { FormationBuilder } from "@/components/pitch/FormationBuilder";
 import { BudgetBar } from "@/components/team/BudgetBar";
 import { CountdownTimer } from "@/components/team/CountdownTimer";
 import { PlayerPickerModal } from "@/components/team/PlayerPickerModal";
@@ -36,8 +44,8 @@ import { PositionBadge } from "@/components/ui/Badge";
 import { useToast } from "@/context/ToastContext";
 import {
   DndContext,
-  MouseSensor,
-  TouchSensor,
+  PointerSensor,
+  rectIntersection,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -62,7 +70,7 @@ export default function TeamPage() {
     substitutionFeedback, setSubstitutionFeedback,
     activeModalState, setActiveModalState,
     handleSwap, handleSetCaptain, handleSetViceCaptain,
-    setOwnerId, hydrateFromSquad, persistLineupOffline
+    setOwnerId, hydrateFromSquad, persistLineupOffline, recordTransfer
   } = useTeamStore();
 
   const { validateSquad: solveSquad } = useSquadSolver();
@@ -91,6 +99,16 @@ export default function TeamPage() {
   const [squadRevision, setSquadRevision] = useState<string | undefined>();
   const [conflictMutation, setConflictMutation] = useState<QueuedSquadMutation | null>(null);
   const [isSyncingOfflineQueue, setIsSyncingOfflineQueue] = useState<boolean>(false);
+  // 3-way merge conflicts from the offline transfer journal (issue #457).
+  const [transferConflict, setTransferConflict] = useState<
+    Extract<JournalSyncOutcome, { status: "conflicts" }> | null
+  >(null);
+
+  // The journal sync notifies here when a reconnect leaves conflicts to resolve.
+  useEffect(
+    () => subscribeTransferConflicts((outcome) => setTransferConflict(outcome)),
+    []
+  );
   const showingSnapshot = useRef(false);
   const userId = user?.id;
 
@@ -286,16 +304,13 @@ export default function TeamPage() {
   const selectedPlayer = players.find((p) => p.playerId === selectedPlayerId);
 
   // DND Handlers
+  // PointerSensor (#462) unifies mouse and touch through pointer events so
+  // one drag gesture works on desktop cursors and touch devices alike.
+  // An 8px activation distance keeps taps/clicks from starting a drag.
   const sensors = useSensors(
-    useSensor(MouseSensor, {
+    useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 10,
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 350,
-        tolerance: 8,
+        distance: 8,
       },
     })
   );
@@ -318,10 +333,16 @@ export default function TeamPage() {
       const overIdNum = Number(over.id);
 
       if (!isNaN(activeIdNum) && !isNaN(overIdNum)) {
+        // A rejected swap leaves rejectedSwap in the store, so the dragged
+        // card snaps back with the contextual warning (#462).
         handleSwap(activeIdNum, overIdNum);
       }
       setSelectedPlayerId(null);
     }
+  };
+
+  const handleDragCancel = () => {
+    setActiveDragPlayer(null);
   };
 
   // Auto-pick balanced squad logic
@@ -470,6 +491,7 @@ export default function TeamPage() {
     const replacing = activeModalState.replacingPlayer;
     if (!replacing) return;
 
+    const replacingLocal = players.find((p) => p.playerId === replacing.id);
     setPlayers((prev) => {
       const idx = prev.findIndex((p) => p.playerId === replacing.id);
       if (idx === -1) return prev;
@@ -483,7 +505,40 @@ export default function TeamPage() {
       return clone;
     });
 
+    // Offline: record the transfer in the journal for the 3-way merge.
+    if (!isOnline && replacingLocal) recordTransfer(newPlayer, replacingLocal);
+
     setSelectedPlayerId(null);
+  };
+
+  // Applies the manager's per-conflict choices and resumes the journal sync.
+  const handleResolveTransferConflicts = async (resolutions: MergeResolutionMap) => {
+    if (!transferConflict) return;
+    const pending = transferConflict;
+    setTransferConflict(null);
+    try {
+      const outcome = await resolveTransferConflicts({
+        squadId,
+        userId: userId ?? null,
+        squadName,
+        conflicts: pending.conflicts,
+        resolutions,
+        base: pending.base,
+        local: pending.local,
+        remote: pending.remote,
+        merged: pending.merged,
+      });
+      if (outcome.status === "synced") {
+        toast.success("Offline transfers synced after resolving the conflicts.");
+      } else if (outcome.status === "held") {
+        toast.info("Your draft is saved on this device for the next gameweek.");
+      } else {
+        toast.info("Offline draft discarded; the server squad stands.");
+      }
+      await refreshQueueCount();
+    } catch {
+      toast.error("Couldn't apply the resolutions. Your draft is still saved on this device.");
+    }
   };
 
   // Save changes to backend with optimistic rollback or offline queue
@@ -656,7 +711,7 @@ export default function TeamPage() {
 
   if (isLoading) {
     return (
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div className="space-y-6 pb-12">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/80 p-6 sm:p-7 rounded-3xl shadow-sm">
             <div>
@@ -697,7 +752,7 @@ export default function TeamPage() {
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
       <div className="space-y-6 pb-12">
         {/* Top Header & Squad Name */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/80 p-6 sm:p-7 rounded-3xl shadow-sm">
@@ -816,6 +871,15 @@ export default function TeamPage() {
             </div>
           </section>
         )}
+
+        {/* Offline transfer journal conflicts (issue #457): server vs local draft */}
+        <TransferConflictModal
+          open={transferConflict !== null}
+          conflicts={transferConflict?.conflicts ?? []}
+          squadName={squadName}
+          onResolve={handleResolveTransferConflicts}
+          onCancel={() => setTransferConflict(null)}
+        />
 
         {/* Offline mode: read-only view of the squad saved on this device */}
         {(offlineSnapshotAt || !isOnline) && queuedMutationsCount === 0 && (
@@ -973,6 +1037,10 @@ export default function TeamPage() {
         )}
 
         {/* Main Pitch View */}
+        <ErrorBoundary name="TeamBuilderFormation" fallbackTitle="Formation builder failed to render">
+          <FormationBuilder />
+        </ErrorBoundary>
+
         <ErrorBoundary name="TeamBuilderPitch" fallbackTitle="Pitch tactical view failed to render">
           <Pitch />
         </ErrorBoundary>
