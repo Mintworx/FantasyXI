@@ -11,6 +11,7 @@ import { trustedLoginSignals } from "../services/security/trustedLoginSignals.js
 import { ReferralService } from "../services/auth/referralService.js";
 import { jwtKeyRotationService } from "../services/auth/jwtKeyRotationService.js";
 import { webAuthnService, PasskeyError } from "../services/auth/webAuthnService.js";
+import { stellarAuthService, StellarAuthError } from "../services/auth/stellarAuthService.js";
 import { refreshTokenService, RefreshTokenUnauthorizedError } from "../services/auth/refreshTokenService.js";
 import {
   passkeyRecoveryService,
@@ -164,6 +165,41 @@ export async function verifyLoginChallenge(
       return;
     }
     next(error);
+  }
+}
+
+/** Answers a failed SEP-10 step with its status; anything else goes to the error handler. */
+function handleStellarAuthError(error: unknown, res: Response, next: NextFunction): void {
+  if (error instanceof StellarAuthError) {
+    res.status(error.statusCode).json({ success: false, message: error.message });
+    return;
+  }
+  if (error instanceof AuthUnauthorizedError) {
+    res.status(401).json({ success: false, message: error.message });
+    return;
+  }
+  next(error);
+}
+
+/** GET /api/v1/auth/stellar/challenge?account=G... (issue #562): SEP-10 challenge transaction */
+export async function getStellarChallenge(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const account = typeof req.query.account === "string" ? req.query.account : undefined;
+    const challenge = await stellarAuthService.createChallenge(account);
+    res.json({ success: true, data: challenge });
+  } catch (error) {
+    handleStellarAuthError(error, res, next);
+  }
+}
+
+/** POST /api/v1/auth/stellar/verify body: { transaction } (issue #562): signed SEP-10 challenge */
+export async function verifyStellarChallenge(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { account } = await stellarAuthService.verifyChallenge(req.body?.transaction);
+    const result = await authService.loginWithStellarAccount(account, requestContext(req));
+    res.json({ success: true, message: "Logged in successfully", data: result });
+  } catch (error) {
+    handleStellarAuthError(error, res, next);
   }
 }
 

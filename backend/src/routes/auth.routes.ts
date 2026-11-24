@@ -25,6 +25,8 @@ import {
   deletePasskey,
   refresh,
   logout,
+  getStellarChallenge,
+  verifyStellarChallenge,
   configurePasskeyRecovery,
   beginPasskeyRecovery,
   completePasskeyRecovery,
@@ -37,6 +39,13 @@ import {
   authorizationRateLimiter,
   authenticatedRateLimiter,
 } from "../middleware/rateLimiter.js";
+import {
+  createWalletLinkChallengeHandler,
+  verifyAndLinkWalletHandler,
+  listLinkedWalletsHandler,
+  renameLinkedWalletHandler,
+  unlinkWalletHandler,
+} from "../controllers/walletLinker.controller.js";
 
 const router = Router();
 router.use(authorizationRateLimiter);
@@ -55,6 +64,12 @@ router.post("/logout", authRateLimiter, logout);
 
 // POST /api/v1/auth/login/verify (step-up code for a login from a new device)
 router.post("/login/verify", authRateLimiter, verifyLoginChallenge);
+
+// SEP-0010 Stellar Web Authentication (issue #562)
+// GET /api/v1/auth/stellar/challenge?account=G...
+router.get("/stellar/challenge", authRateLimiter, getStellarChallenge);
+// POST /api/v1/auth/stellar/verify
+router.post("/stellar/verify", authRateLimiter, verifyStellarChallenge);
 
 // GET /api/v1/auth/me (Protected)
 router.get("/me", requireAuth, authenticatedRateLimiter, requirePermission(Permission.PROFILE_READ), getMe);
@@ -116,6 +131,14 @@ router.get("/webauthn/credentials", ...passkeyOwner, listPasskeys);
 // DELETE /api/v1/auth/webauthn/credentials/:credentialId (Protected)
 router.delete("/webauthn/credentials/:credentialId", ...passkeyOwner, deletePasskey);
 
+// ============================================================
+// Multi-Chain Crypto Wallet Account Linker (issue #426)
+// ============================================================
+router.post("/wallets/challenge", ...passkeyOwner, createWalletLinkChallengeHandler);
+router.post("/wallets/verify", ...passkeyOwner, verifyAndLinkWalletHandler);
+router.get("/wallets", requireAuth, authenticatedRateLimiter, listLinkedWalletsHandler);
+router.patch("/wallets/:walletId", ...passkeyOwner, renameLinkedWalletHandler);
+router.delete("/wallets/:walletId", ...passkeyOwner, unlinkWalletHandler);
 router.post("/webauthn/recovery/configure", ...passkeyOwner, configurePasskeyRecovery);
 router.post("/webauthn/recovery/begin", authRateLimiter, beginPasskeyRecovery);
 router.post("/webauthn/recovery/complete", authRateLimiter, completePasskeyRecovery);

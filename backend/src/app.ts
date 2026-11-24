@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import apiV1Router from "./routes/index.js";
+import devRoutes from "./routes/dev.routes.js";
 import { apiRateLimiter, authorizationRateLimiter } from "./middleware/rateLimiter.js";
 import { requestSigning } from "./middleware/requestSigning.js";
 import { errorHandler } from "./middleware/error.middleware.js";
@@ -225,6 +226,8 @@ app.post("/api/v1/admin/tenants", authorizationRateLimiter, requireAuth, require
 app.get("/.well-known/jwks.json", getJwks);
 
 // API v1 Routes
+// Development-only helpers; every route returns 404 in production (issue #558)
+app.use("/api/dev", devRoutes);
 app.use("/api/v1", apiV1Router);
 app.use("/api", apiV1Router);
 

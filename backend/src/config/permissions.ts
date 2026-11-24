@@ -68,6 +68,10 @@ export enum Permission {
 
   /** Sybil-ring investigations (issue #274): exposes members' wallets and networks */
   SECURITY_REVIEW = "security:review",
+
+  // Multi-signature escrow dispute arbitration (issue #419)
+  DISPUTE_INSPECT = "dispute:inspect",
+  DISPUTE_ARBITRATE = "dispute:arbitrate",
 }
 
 /** Everything a signed-in manager can do with their own data. */
@@ -95,6 +99,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> =
     Permission.SYSTEM_HEALTH_READ,
     Permission.PAYOUT_READ,
     Permission.LEAGUE_TIER_MANAGE,
+    Permission.DISPUTE_INSPECT,
   ]),
   [Role.ADMIN]: new Set([
     ...USER_PERMISSIONS,
@@ -109,6 +114,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> =
     Permission.FINANCIAL_AUDIT_READ,
     Permission.AUTH_KEYS_MANAGE,
     Permission.SECURITY_REVIEW,
+    Permission.DISPUTE_INSPECT,
+    Permission.DISPUTE_ARBITRATE,
   ]),
   // Automated callers act on platform data, never as a manager
   [Role.SERVICE]: new Set([
@@ -117,6 +124,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> =
     Permission.FINANCIAL_RECONCILE,
     Permission.SYSTEM_HEALTH_READ,
     Permission.AUTH_KEYS_MANAGE,
+    Permission.DISPUTE_INSPECT,
+    Permission.DISPUTE_ARBITRATE,
   ]),
 };
 

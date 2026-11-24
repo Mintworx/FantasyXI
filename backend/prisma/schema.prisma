@@ -315,6 +315,7 @@ model Gameweek {
   chipCancellations SquadChipCancellation[]
   leagueFixtures  LeagueFixture[]
   matchRatingHistory MatchRatingHistory[]
+  auditAnchor     GameweekAuditAnchor?
 
   @@map("gameweeks")
 }
@@ -890,6 +891,29 @@ model DepositRefundClaim {
   @@map("deposit_refund_claims")
 }
 
+/// Public, immutable receipt anchoring a settled gameweek's standings and prize
+/// allocations to Stellar: the SHA-256 digest is the MEMO_HASH of `stellarTxHash`.
+/// `snapshot` is the canonical data the digest was computed from.
+model GameweekAuditAnchor {
+  id            String   @id @default(uuid())
+  gameweekId    Int      @unique @map("gameweek_id")
+  digest        String   @map("digest")
+  snapshot      Json
+  leagueCount   Int      @map("league_count")
+  memberCount   Int      @map("member_count")
+  status        String   @default("PENDING")
+  stellarTxHash String?  @unique @map("stellar_tx_hash")
+  ledgerSeq     Int?     @map("ledger_seq")
+  errorMessage  String?  @map("error_message")
+  attempts      Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+  anchoredAt    DateTime? @map("anchored_at")
+
+  gameweek Gameweek @relation(fields: [gameweekId], references: [id])
+
+  @@map("gameweek_audit_anchors")
+}
+
 /// Tracks Soroban RPC event indexer position and pagination cursor
 model IndexerCursor {
   id         String   @id
@@ -1137,6 +1161,19 @@ model CryptoAuditLogEntry {
 
   @@index([entityType, entityId])
   @@map("crypto_audit_log")
+}
+
+/// Definitive session revocation record checked only after a Redis Bloom hit.
+model RevokedSession {
+  id        String   @id @default(uuid())
+  sessionId String   @unique @map("session_id")
+  userId    String?  @map("user_id")
+  reason    String?
+  revokedAt DateTime @default(now()) @map("revoked_at")
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("revoked_sessions")
 }
 
 /// An on-chain transaction whose finality is tracked by TransactionCoordinatorService.
