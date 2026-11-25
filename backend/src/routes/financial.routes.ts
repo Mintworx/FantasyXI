@@ -18,6 +18,7 @@ import {
   resolveDisputeRefundHandler,
   rejectDisputeHandler,
   executeMerkleSettlementHandler,
+  getTransactions,
   sponsorFeeHandler,
 } from "../controllers/financial.controller.js";
 import { requireAuth, requirePermission, requireRole } from "../middleware/authMiddleware.js";
@@ -54,6 +55,7 @@ router.use(financialRateLimiter);
 router.use(idempotency);
 
 router.get("/requirement", getPaymentRequirement);
+router.get("/transactions", requirePermission(Permission.PAYMENT_MANAGE_OWN), getTransactions);
 router.post(
   "/simulate-deposit",
   mutationRateLimiter,

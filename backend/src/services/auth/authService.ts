@@ -716,8 +716,8 @@ export class AuthService {
    */
   public async setPassword(
     userId: string,
-    input: { password?: string; currentPassword?: string }
-  ): Promise<SafeUser> {
+    input: { password?: string; currentPassword?: string; revokeOtherSessions?: boolean }
+  ): Promise<{ user: SafeUser; revokedSessions: number }> {
     this.validatePassword(input.password);
     const nextPassword = input.password as string;
 
@@ -740,7 +740,14 @@ export class AuthService {
       where: { id: userId },
       data: { passwordHash },
     });
-    return toSafeUser(updated);
+
+    let revokedSessions = 0;
+    if (input.revokeOtherSessions) {
+      await new RefreshTokenService(this.db).revokeAllForUser(userId);
+      revokedSessions = await sessionRegistryService.revokeAllUserSessions(userId);
+    }
+
+    return { user: toSafeUser(updated), revokedSessions };
   }
 
   /**

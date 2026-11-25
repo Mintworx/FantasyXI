@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "@/context/WalletContext";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
 import { OfflineIndicator } from "./OfflineIndicator";
 import { PushNotificationPrompt } from "./PushNotificationPrompt";
+import { NotificationDrawer } from "./NotificationDrawer";
 import {
   StellarNetworkBadge,
   StellarNetworkBanner,
@@ -14,11 +15,34 @@ import {
 } from "@/components/stellar/StellarNetworkStatus";
 import { FantasyXILogo } from "@/components/ui/FantasyXILogo";
 import { IconSearch, IconBell, IconSun, IconWallet } from "@/components/ui/Icons";
+import { api } from "@/lib/api";
+
+const UNREAD_POLL_INTERVAL_MS = 30_000;
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const networkStatus = useStellarNetworkStatus();
   const { publicKey, openConnectModal } = useWallet();
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      api
+        .get<{ unreadCount: number }>("/api/v1/notifications?limit=1")
+        .then((res) => {
+          if (!cancelled) setUnreadCount(res.unreadCount ?? 0);
+        })
+        .catch(() => undefined);
+    };
+    poll();
+    const interval = setInterval(poll, UNREAD_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc] text-slate-800 font-sans">
@@ -60,11 +84,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
             {/* Notification Bell */}
             <button
+              type="button"
               title="Notifications"
+              onClick={() => setIsNotificationsOpen(true)}
               className="relative p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
             >
               <IconBell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500" />
+              )}
             </button>
 
             {/* Connect Wallet Button */}
@@ -89,6 +117,13 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
       {/* Mobile Bottom Navigation */}
       <MobileNav />
+
+      {/* Notification Center Drawer */}
+      <NotificationDrawer
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        onUnreadCountChange={setUnreadCount}
+      />
     </div>
   );
 };

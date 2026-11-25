@@ -16,6 +16,7 @@ import financialRoutes from "./financial.routes.js";
 import fxOracleRoutes from "./fxOracle.routes.js";
 import sep8Routes from "./sep8.routes.js";
 import webhookRoutes from "./webhook.routes.js";
+import notificationRoutes from "./notification.routes.js";
 import fixtureReschedulingRoutes from "../controllers/fixture-rescheduling.controller.js";
 import auditRoutes from "./audit.routes.js";
 import auditAnchorRoutes from "./auditAnchor.routes.js";
@@ -59,6 +60,7 @@ apiV1Router.post(
   sponsorFeeHandler
 );
 apiV1Router.use("/webhooks", webhookRoutes);
+apiV1Router.use("/notifications", notificationRoutes);
 apiV1Router.use("/audit", auditRoutes);
 // Public: on-chain audit anchors for settled gameweeks (digest and verification only)
 apiV1Router.use("/audit-anchors", auditAnchorRoutes);
