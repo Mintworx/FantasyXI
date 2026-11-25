@@ -4,6 +4,7 @@ import {
   AuthValidationError,
   AuthConflictError,
   AuthUnauthorizedError,
+  AuthForbiddenError,
   AuthNotFoundError,
   AuthLoginBlockedError,
 } from "../services/auth/authService.js";
