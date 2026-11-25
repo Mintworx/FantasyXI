@@ -3,6 +3,7 @@ import {
   getPlayers,
   getPlayerById,
   getPlayerOwnershipStats,
+  getOwnershipAndCaptaincyStats,
   batchPlayerStats,
   getPlayerAnalytics,
   getMarketTrends,
@@ -17,6 +18,9 @@ router.get("/", getPlayers);
 
 // GET /api/v1/players/ownership-stats
 router.get("/ownership-stats", getPlayerOwnershipStats);
+
+// GET /api/v1/players/stats/ownership (cached ownership % + captaincy % per player)
+router.get("/stats/ownership", getOwnershipAndCaptaincyStats);
 
 // GET /api/v1/players/market-trends
 router.get("/market-trends", getMarketTrends);
