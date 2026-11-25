@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "@/context/WalletContext";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
+import { MobileNavDrawer } from "./MobileNavDrawer";
 import { OfflineIndicator } from "./OfflineIndicator";
 import { PushNotificationPrompt } from "./PushNotificationPrompt";
 import { NotificationDrawer } from "./NotificationDrawer";
@@ -14,13 +15,15 @@ import {
   useStellarNetworkStatus,
 } from "@/components/stellar/StellarNetworkStatus";
 import { FantasyXILogo } from "@/components/ui/FantasyXILogo";
-import { IconSearch, IconBell, IconSun, IconWallet } from "@/components/ui/Icons";
+import { IconSearch, IconBell, IconSun, IconWallet, IconMenu } from "@/components/ui/Icons";
 import { api } from "@/lib/api";
 
 const UNREAD_POLL_INTERVAL_MS = 30_000;
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const networkStatus = useStellarNetworkStatus();
@@ -59,8 +62,19 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
         {/* Top Header Bar */}
         <header className="sticky top-0 z-20 flex items-center justify-between px-4 sm:px-8 py-3 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-          {/* Mobile Logo */}
-          <div className="flex items-center gap-2 md:hidden">
+          {/* Mobile Menu Toggle + Logo */}
+          <div className="flex items-center gap-1 md:hidden">
+            <button
+              type="button"
+              ref={menuButtonRef}
+              onClick={() => setIsDrawerOpen(true)}
+              aria-label="Open navigation menu"
+              aria-haspopup="dialog"
+              aria-expanded={isDrawerOpen}
+              className="p-2 -ml-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <IconMenu className="w-5 h-5" />
+            </button>
             <Link href="/" className="flex items-center gap-2">
               <FantasyXILogo size={32} showText={true} />
             </Link>
@@ -118,11 +132,19 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       {/* Mobile Bottom Navigation */}
       <MobileNav />
 
+      {/* Mobile Navigation Drawer (hamburger menu) */}
+      <MobileNavDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        toggleButtonRef={menuButtonRef}
+      />
+
       {/* Notification Center Drawer */}
       <NotificationDrawer
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
         onUnreadCountChange={setUnreadCount}
+      />
       />
     </div>
   );
