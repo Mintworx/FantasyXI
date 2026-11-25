@@ -313,6 +313,7 @@ model Gameweek {
   matchRatingHistory MatchRatingHistory[]
   auditAnchor     GameweekAuditAnchor?
 
+  @@index([deadline])
   @@map("gameweeks")
 }
 
