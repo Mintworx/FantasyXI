@@ -225,6 +225,13 @@ app.post("/api/v1/admin/tenants", authorizationRateLimiter, requireAuth, require
 // Public JWK Set for access-token verification (issue #332)
 app.get("/.well-known/jwks.json", getJwks);
 
+// Interactive OpenAPI documentation (issue #510): Swagger UI at /api/docs
+// and the raw spec at /api/docs/docs.json — development only, never in
+// production. The router also 404s per-request when NODE_ENV is production.
+if (isDocsEnabled()) {
+  app.use("/api/docs", docsRouter);
+}
+
 // API v1 Routes
 // Development-only helpers; every route returns 404 in production (issue #558)
 app.use("/api/dev", devRoutes);

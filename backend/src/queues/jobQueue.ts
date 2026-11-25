@@ -1,7 +1,7 @@
 import { financialService } from "../services/financial/financialService.js";
 import PgBoss from "pg-boss";
 import { collectMatchdaySyncTasks } from "../jobs/matchdayPolling.js";
-import { lockDueGameweeks } from "../jobs/deadlineLocking.js";
+import { lockDueGameweeksAndRefreshOwnership } from "../jobs/ownershipStatsRefresh.js";
 import { settleCompletedGameweeks } from "../jobs/gameweekSettlement.js";
 import { processLeagueRefunds } from "../jobs/leagueRefunds.js";
 import { sorobanTransactionReplayDaemon } from "../services/financial/sorobanTransactionReplayQueue.js";
@@ -12,8 +12,7 @@ import { runStellarReconciliationJob, STELLAR_RECONCILIATION_CRON, STELLAR_RECON
 import { applyRetroactiveBpsAdjustments } from "../jobs/retroactiveBpsAdjustments.js";
 import { jwtKeyRotationService } from "../services/auth/jwtKeyRotationService.js";
 import { auditLeaguesForCollusion } from "../jobs/leagueIntegrityAudit.js";
-import { financialMerkleService } from "../services/audit/financialMerkleService.js";
-import { privacyService } from "../services/privacy/privacyService.js";
+import { sendGameweekDeadlineReminders } from "../jobs/deadlineReminders.js";
 import { anchorPayoutAuditRoot } from "../jobs/payoutAuditAnchor.js";
 import {
   runSorobanTtlExtensionJob,
@@ -29,6 +28,12 @@ import {
   fplTaskPriority,
   type FplSyncTask,
 } from "./fplSyncQueue.js";
+import {
+  executeLeagueInviteEmailTask,
+  LEAGUE_INVITE_QUEUE_NAME,
+  leagueInviteQueueConfig,
+  type LeagueInviteEmailTask,
+} from "./leagueInviteQueue.js";
 
 /**
  * PostgreSQL-backed background job queue (pg-boss).
@@ -60,13 +65,9 @@ export interface QueueMetrics {
 // delegated to the `fpl-sync` queue (with retry + DLQ) instead of running
 // inline inside the poller.
 export const JOB_DEFINITIONS: JobDefinition[] = [
-  { name: "financial-merkle-publish", cron: "0 * * * *", handler: () => financialMerkleService.publishClosedHours() },
-  { name: "financial-merkle-verify", cron: "* * * * *", handler: () => financialMerkleService.verify().then(rows => ({ verified: rows.length })) },
-  { name: "privacy-requests", cron: "* * * * *", handler: () => privacyService.runNext() },
-  { name: "privacy-expiry", cron: "*/15 * * * *", handler: () => privacyService.cleanup() },
   { name: "settlement-recovery", cron: "* * * * *", handler: () => financialService.recoverPendingSettlements() },
   { name: "matchday-poll", cron: "* * * * *", handler: () => enqueuePendingSyncs() },
-  { name: "deadline-lock", cron: "* * * * *", handler: () => lockDueGameweeks() },
+  { name: "deadline-lock", cron: "* * * * *", handler: () => lockDueGameweeksAndRefreshOwnership() },
   { name: "gameweek-settlement", cron: "*/5 * * * *", handler: () => settleCompletedGameweeks() },
   { name: "league-refunds", cron: "*/5 * * * *", handler: () => processLeagueRefunds() },
   { name: "ledger-delta-audit", cron: "*/5 * * * *", handler: () => ledgerAuditService.runAudit() },
@@ -88,6 +89,8 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
   { name: "jwt-key-rotation", cron: "*/15 * * * *", handler: () => jwtKeyRotationService.rotate() },
   // League integrity and collusion detection (issue #328)
   { name: "league-collusion-audit", cron: "0 */6 * * *", handler: () => auditLeaguesForCollusion() },
+  // Send deadline reminder emails 6 hours before gameweek deadline
+  { name: "deadline-reminders", cron: "* * * * *", handler: () => sendGameweekDeadlineReminders() },
   // Soroban contract storage TTL extension worker (issue #548)
   {
     name: SOROBAN_TTL_EXTENSION_JOB_NAME,
@@ -121,6 +124,7 @@ const metrics = new Map<string, QueueMetrics>(
     ...JOB_DEFINITIONS.map((def) => [def.name, emptyMetrics()] as const),
     [FPL_SYNC_QUEUE_NAME, emptyMetrics()] as const,
     [FPL_SYNC_DLQ_NAME, emptyMetrics()] as const,
+    [LEAGUE_INVITE_QUEUE_NAME, emptyMetrics()] as const,
   ]
 );
 
@@ -133,6 +137,22 @@ export async function enqueueFplSync(task: FplSyncTask): Promise<void> {
     throw new Error("[jobs] Job queue is not running; cannot enqueue FPL sync task");
   }
   await boss.send(FPL_SYNC_QUEUE_NAME, task, { priority: fplTaskPriority(task) });
+}
+
+/**
+ * Enqueues a league invite email send on the `league-invite-email` queue so
+ * the inviting request can respond without waiting on mail delivery. Falls
+ * back to firing the send directly (still not awaited by the caller) when
+ * the queue isn't running, e.g. with JOB_QUEUE_ENABLED=false or in tests.
+ */
+export async function enqueueLeagueInviteEmail(task: LeagueInviteEmailTask): Promise<void> {
+  if (!boss) {
+    void executeLeagueInviteEmailTask(task).catch((error) =>
+      console.error("[jobs] Failed to send league invite email (queue not running):", error)
+    );
+    return;
+  }
+  await boss.send(LEAGUE_INVITE_QUEUE_NAME, task);
 }
 
 /**
@@ -254,6 +274,31 @@ export async function startJobQueue(connectionString: string): Promise<void> {
     }
   );
 
+  // League invite emails: retried with exponential backoff; no DLQ since a
+  // failed send is simply dropped after the retry budget is exhausted.
+  await instance.createQueue(LEAGUE_INVITE_QUEUE_NAME, {
+    name: LEAGUE_INVITE_QUEUE_NAME,
+    ...leagueInviteQueueConfig(),
+  });
+  await instance.work(LEAGUE_INVITE_QUEUE_NAME, { includeMetadata: true }, async ([job]) => {
+    const m = metrics.get(LEAGUE_INVITE_QUEUE_NAME)!;
+    const startedAt = Date.now();
+    if (job.retryCount > 0) m.retried++;
+    try {
+      const result = await executeLeagueInviteEmailTask(job.data as LeagueInviteEmailTask);
+      m.succeeded++;
+      return result;
+    } catch (error) {
+      m.failed++;
+      m.lastError = (error as Error).message;
+      throw error;
+    } finally {
+      m.processed++;
+      m.lastRunAt = new Date(startedAt).toISOString();
+      m.lastDurationMs = Date.now() - startedAt;
+    }
+  });
+
   boss = instance;
   sorobanTransactionReplayDaemon.start();
   console.log(`[jobs] Job queue started: ${JOB_DEFINITIONS.map((d) => d.name).join(", ")}`);
@@ -285,6 +330,7 @@ export async function getQueueHealth() {
 
   const syncQueue = metrics.get(FPL_SYNC_QUEUE_NAME)!;
   const dlq = metrics.get(FPL_SYNC_DLQ_NAME)!;
+  const leagueInviteQueue = metrics.get(LEAGUE_INVITE_QUEUE_NAME)!;
 
   return {
     running: boss !== null,
@@ -301,6 +347,11 @@ export async function getQueueHealth() {
       name: FPL_SYNC_DLQ_NAME,
       queued: boss ? await boss.getQueueSize(FPL_SYNC_DLQ_NAME) : null,
       ...dlq,
+    },
+    leagueInvite: {
+      name: LEAGUE_INVITE_QUEUE_NAME,
+      queued: boss ? await boss.getQueueSize(LEAGUE_INVITE_QUEUE_NAME) : null,
+      ...leagueInviteQueue,
     },
   };
 }

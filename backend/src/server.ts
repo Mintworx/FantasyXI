@@ -6,7 +6,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import app from "./app.js";
 import { startJobQueue, stopJobQueue, getQueueHealth } from "./queues/jobQueue.js";
-import { apiRateLimiter, authorizationRateLimiter } from "./middleware/rateLimiter.js";
+import { apiRateLimiter } from "./middleware/rateLimiter.js";
 import { optionalAuth } from "./middleware/authMiddleware.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { requireAuth, requirePermission } from "./middleware/authMiddleware.js";
@@ -16,7 +16,7 @@ import { expressMiddleware } from "@as-integrations/express5";
 import DataLoader from "dataloader";
 import { prisma, getReadReplicaStatus, getSlowQueryCount } from "./config/db.js";
 import { closeRedisClient, getRedisClient } from "./config/redis.js";
-import { preferReplicaReads, primaryReads } from "./middleware/readConsistency.js";
+import { preferReplicaReads } from "./middleware/readConsistency.js";
 import { financialAuditLog } from "./services/audit/financialAuditLog.js";
 import { resolvers } from "./graphql/resolvers.js";
 import { typeDefs } from "./graphql/schema.js";
@@ -32,6 +32,7 @@ import {
 } from "./services/financial/transactionCoordinatorService.js";
 import { financialService } from "./services/financial/financialService.js";
 import { jwtKeyRotationService } from "./services/auth/jwtKeyRotationService.js";
+import { verifyAccessToken } from "./config/jwt.js";
 import { fplClient } from "./services/fpl/fplClient.js";
 import { partitionRotationWorker } from "./workers/partitionRotationWorker.js";
 import {
@@ -45,6 +46,8 @@ import {
   type StellarStreamService,
 } from "./services/financial/stellarStreamService.js";
 import { createConnectionLeakDetector } from "./services/monitoring/connectionLeakDetector.js";
+import { startSessionStreamSubscriber, stopSessionStreamSubscriber } from "./services/auth/sessionStreamSync.js";
+import { outboxRelayWorker } from "./services/outbox/outboxRelayWorker.js";
 
 dotenv.config();
 
@@ -251,18 +254,34 @@ async function startServer(): Promise<void> {
   await apolloServer.start();
   app.use(
     "/graphql",
-    authorizationRateLimiter,
-    requireAuth,
-    // Owner and current-role authorization must not use a lagging replica.
-    primaryReads,
+    // The schema is query-only, so GraphQL reads may be served by a replica
+    preferReplicaReads,
     express.json(),
     expressMiddleware(apolloServer, {
-      context: async ({ req }) => ({
-        principal: req.user && req.user.role !== "SERVICE"
-          ? await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, role: true } })
-          : null,
-        loaders: {
-          users: new DataLoader(async (ids) => {
+      context: async ({ req }) => {
+        // Optional viewer identity for name masking (issue #511): a valid
+        // Bearer token lets the owner themselves and platform admins see
+        // real names; missing or invalid tokens read as anonymous, exactly
+        // like optionalAuth on the REST routes.
+        let viewer: { id: string; role?: string | null } | undefined;
+        const header = req.headers.authorization;
+        if (header) {
+          const parts = header.trim().split(/\s+/);
+          if (parts.length === 2 && parts[0].toLowerCase() === "bearer") {
+            try {
+              const payload = verifyAccessToken(parts[1]);
+              if (payload.userId) {
+                viewer = { id: payload.userId, role: payload.role ?? null };
+              }
+            } catch {
+              // Ignore invalid tokens for optional authentication.
+            }
+          }
+        }
+        return {
+          viewer,
+          loaders: {
+            users: new DataLoader(async (ids) => {
             const records = await prisma.user.findMany({
               where: { id: { in: [...ids].map(String) } },
               include: { wallet: true, squads: true, createdLeagues: true },
@@ -278,8 +297,9 @@ async function startServer(): Promise<void> {
             const byId = new Map(records.map((record) => [record.id, record]));
             return ids.map((id) => byId.get(Number(id)) ?? null);
           }),
-        },
-      }),
+          },
+        };
+      },
     }),
   );
 
@@ -307,6 +327,14 @@ async function startServer(): Promise<void> {
   liveSocketServer = attachLiveSocketServer(httpServer);
   startTransactionCoordinator();
 
+  // Issue #439: start cross-node session revocation stream subscriber
+  startSessionStreamSubscriber();
+
+  // Issue #438: start transactional outbox relay worker
+  if (process.env.DATABASE_URL && process.env.OUTBOX_RELAY_ENABLED !== "false") {
+    outboxRelayWorker.start();
+  }
+
   // Initialize JWT signing key rotation and preload keys
   await jwtKeyRotationService.start().catch((err) => {
     console.warn("[jwt-keys] Failed to initialize key rotation service:", err);
@@ -323,6 +351,7 @@ process.on("SIGTERM", () => {
   partitionRotationWorker.stop();
   sorobanEventIngestion?.stop();
   stellarStream?.stop();
+  outboxRelayWorker.stop();
   // Persist buffered financial audit entries before exiting
   stopJobQueue()
     .finally(() => transactionCoordinator.stop())
@@ -333,6 +362,7 @@ process.on("SIGTERM", () => {
     .finally(() => liveSocketServer?.close())
     .finally(() => chatAdapter?.close())
     .finally(() => eventFanout.close())
+    .finally(() => stopSessionStreamSubscriber())
     .finally(() => closeRedisClient())
     .finally(() => connectionLeakDetector?.stop())
     .finally(() => process.exit(0));

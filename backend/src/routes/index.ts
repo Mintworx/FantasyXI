@@ -16,12 +16,16 @@ import financialRoutes from "./financial.routes.js";
 import fxOracleRoutes from "./fxOracle.routes.js";
 import sep8Routes from "./sep8.routes.js";
 import webhookRoutes from "./webhook.routes.js";
+import notificationRoutes from "./notification.routes.js";
 import fixtureReschedulingRoutes from "../controllers/fixture-rescheduling.controller.js";
 import auditRoutes from "./audit.routes.js";
 import auditAnchorRoutes from "./auditAnchor.routes.js";
 import telemetryRoutes from "./telemetry.routes.js";
 import { replicaReads } from "../middleware/readConsistency.js";
-import { getProofOfReserve } from "../controllers/financial.controller.js";
+import { getProofOfReserve, sponsorFeeHandler } from "../controllers/financial.controller.js";
+import { requireAuth, requirePermission } from "../middleware/authMiddleware.js";
+import { mutationRateLimiter } from "../middleware/rateLimiter.js";
+import { Permission } from "../types/index.js";
 import { fplDataFreshness } from "../middleware/fplDataFreshness.js";
 import financialMerkleRoutes from "./financialMerkle.routes.js";
 import privacyRoutes from "./privacy.routes.js";
@@ -51,7 +55,16 @@ apiV1Router.use("/financial", financialRoutes);
 apiV1Router.use("/fx", fxOracleRoutes);
 // Public: latest proof-of-reserve roots and totals (no participant data)
 apiV1Router.get("/proof-of-reserve", getProofOfReserve);
+// Stellar fee-bump transaction sponsorship alias (Issue #549)
+apiV1Router.post(
+  "/stellar/sponsor-fee",
+  requireAuth,
+  mutationRateLimiter,
+  requirePermission(Permission.PAYMENT_MANAGE_OWN),
+  sponsorFeeHandler
+);
 apiV1Router.use("/webhooks", webhookRoutes);
+apiV1Router.use("/notifications", notificationRoutes);
 apiV1Router.use("/audit", auditRoutes);
 // Public: on-chain audit anchors for settled gameweeks (digest and verification only)
 apiV1Router.use("/audit-anchors", auditAnchorRoutes);

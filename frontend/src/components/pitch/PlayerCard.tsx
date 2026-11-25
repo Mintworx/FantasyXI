@@ -13,6 +13,7 @@ import {
 } from "@/lib/dragDropFormation";
 import { useTeamStore } from "@/store/teamStore";
 import { PlayerCardSkeleton } from "@/components/team/PlayerCardSkeleton";
+import { PlayerStatusBadge } from "@/components/pitch/PlayerStatusBadge";
 
 export interface PlayerCardProps {
   player?: Player | null;
@@ -312,6 +313,7 @@ const PlayerCardComponent: React.FC<PlayerCardProps> = ({
           <span className="text-xs sm:text-sm font-black tracking-tight font-mono">
             {player.team?.shortName || player.position}
           </span>
+          <PlayerStatusBadge player={player} />
         </div>
 
         {/* Player Name Pill */}

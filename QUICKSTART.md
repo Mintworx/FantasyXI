@@ -1,300 +1,239 @@
-# Quick Start Guide
+# Live Event Ticker - Quick Start Guide
 
-## 5-Minute Setup
+## 30 Second Integration
 
-### 1. Environment Setup
+Add real-time match events to any gameweek/match page:
+
+```tsx
+import { LiveEventTicker } from "@/components/live/LiveEventTicker";
+
+export function GameweekPage() {
+  return (
+    <>
+      {/* Your existing content */}
+      <div>Match info, standings, etc.</div>
+
+      {/* Add this 1 line */}
+      <LiveEventTicker gameweekId={1} />
+    </>
+  );
+}
+```
+
+That's it! Events will start streaming in real-time.
+
+## What You Get
+
+✅ Live event cards sliding in from the top  
+✅ Goals, assists, cards, saves, bonus points  
+✅ Filter for "My Squad" or "Fantasy Relevant" events  
+✅ Auto-reconnection on network issues  
+✅ Captain/Vice Captain badges  
+✅ Points display (green gains, red deductions)  
+✅ Auto-dismiss after 8 seconds  
+✅ Manual dismiss button  
+✅ Connection status indicator  
+
+## Full Example
+
+```tsx
+import { LiveEventTicker } from "@/components/live/LiveEventTicker";
+
+export function MatchdayDashboard({ gameweekId }: { gameweekId: number }) {
+  return (
+    <div className="p-4">
+      <h1>Gameweek {gameweekId} Live</h1>
+
+      {/* The ticker - position top or bottom */}
+      <LiveEventTicker
+        gameweekId={gameweekId}
+        position="top"                    // or "bottom"
+        showConnectionStatus={true}       // Show live/offline indicator
+        autoRemoveEventAfterMs={8000}     // 8 seconds before auto-dismiss
+        maxVisibleEvents={5}              // Show max 5 cards at once
+      />
+
+      {/* Your other content */}
+      <div className="mt-32">
+        {/* Fixtures, standings, etc */}
+      </div>
+    </div>
+  );
+}
+```
+
+## Accessing Store Data
+
+Get real-time stats for your own UI:
+
+```tsx
+import { useEventTickerStore } from "@/store/eventTickerStore";
+
+function EventStats() {
+  const { eventQueue, connectionState } = useEventTickerStore();
+
+  return (
+    <div>
+      <p>Events received: {eventQueue.length}</p>
+      <p>Status: {connectionState === 'open' ? '🟢 Live' : '🔴 Offline'}</p>
+    </div>
+  );
+}
+```
+
+## Files You Got
+
+| File | Purpose | Size |
+|------|---------|------|
+| `useEventTicker.ts` | WebSocket hook | 150 lines |
+| `eventTickerStore.ts` | Zustand store | 110 lines |
+| `EventTickerCard.tsx` | Event card | 190 lines |
+| `LiveEventTicker.tsx` | Container | 200 lines |
+| `eventTicker.test.tsx` | Tests | 300 lines |
+
+## Filtering
+
+Three built-in filter modes users can toggle:
+
+```
+┌─────────────────────────────────────────┐
+│ All Events │ My Squad │ Fantasy Points │
+└─────────────────────────────────────────┘
+```
+
+- **All Events**: Every goal, assist, card, save, bonus
+- **My Squad**: Only your players' events  
+- **Fantasy Points**: Only events that affect fantasy points
+
+## Events Shown
+
+| Event | Icon | Points |
+|-------|------|--------|
+| Goal | ⚽ | +5 (varies) |
+| Assist | 🎯 | +1 |
+| Yellow Card | 🟨 | -1 |
+| Red Card | 🔴 | -3 |
+| Save | 🛡️ | +1 |
+| Bonus | ⭐ | +1 to +3 |
+
+## Connection Status
+
+Top-left indicator shows:
+- 🟢 **Live** - Connected and receiving events
+- 🟡 **Reconnecting** - Temporarily offline, auto-retrying
+- 🔴 **Offline** - Not connected (check internet)
+
+Auto-reconnects up to 5 times with increasing delays.
+
+## Customization
+
+### Change Position
+
+```tsx
+// Top of screen (default)
+<LiveEventTicker gameweekId={1} position="top" />
+
+// Bottom of screen
+<LiveEventTicker gameweekId={1} position="bottom" />
+```
+
+### Change Event Duration
+
+```tsx
+// Show for 5 seconds instead of 8
+<LiveEventTicker gameweekId={1} autoRemoveEventAfterMs={5000} />
+```
+
+### Show More/Fewer Events
+
+```tsx
+// Show up to 10 events instead of 5
+<LiveEventTicker gameweekId={1} maxVisibleEvents={10} />
+```
+
+### Hide Connection Status
+
+```tsx
+// Don't show the indicator
+<LiveEventTicker gameweekId={1} showConnectionStatus={false} />
+```
+
+### Add CSS Classes
+
+```tsx
+// Add custom styling
+<LiveEventTicker 
+  gameweekId={1} 
+  className="z-50 shadow-2xl"
+/>
+```
+
+## Testing
+
+Run tests to verify everything works:
 
 ```bash
-# Copy example config
-cp .env.example .env
+# All ticker tests
+npm test src/tests/eventTicker.test.tsx
 
-# Edit .env with your values
-# Minimum required:
-# - FPL_API_BASE_URL (already set)
-# - BACKUP_API_URL (set to your backup provider)
-# - FALLBACK_CACHE_PATH (already set)
+# Specific test
+npm test -- -t "EventTickerCard"
+npm test -- -t "deduplicates"
 ```
 
-### 2. Compile TypeScript
+## Common Questions
 
-```bash
-npx tsc
-```
+**Q: Do I need to install anything?**  
+A: No! Uses existing packages (React, Zustand, Tailwind).
 
-Output appears in `dist/` directory.
+**Q: Will it work offline?**  
+A: Events won't arrive, but it gracefully shows "Offline" status and auto-reconnects.
 
-### 3. Run the Service
+**Q: Can I customize colors?**  
+A: Yes, modify Tailwind classes in `EventTickerCard.tsx` or `LiveEventTicker.tsx`.
 
-```bash
-# Start monitoring
-node dist/index.js
+**Q: How many events can it handle?**  
+A: Unlimited, but only shows max 5 cards. Queue stores up to 50 events.
 
-# Or with environment variables
-FPL_API_BASE_URL="https://fantasy.premierleague.com/api" \
-CANARY_PROBE_INTERVAL_MS="30000" \
-node dist/index.js
-```
+**Q: Does it work on mobile?**  
+A: Yes, fully responsive design.
 
-### 4. Integrate with Your Code
-
-```typescript
-import { FPLHealthMonitor } from './dist/index.js';
-
-const monitor = new FPLHealthMonitor();
-monitor.start();
-
-// Get data with automatic failover
-const data = await monitor.fetchBootstrapData();
-console.log('Using provider:', monitor.getStatus().currentProvider);
-```
-
-## Common Tasks
-
-### Check Service Status
-
-```typescript
-const status = monitor.getStatus();
-console.log(status.currentProvider); // PRIMARY, BACKUP, or FALLBACK
-console.log(status.canary.metrics.averageResponseTimeMs);
-console.log(status.canary.circuitBreaker.state);
-```
-
-### Listen for Failovers
-
-```typescript
-monitor.canary.onFailoverListener(async (event) => {
-  console.log(`Failed over from ${event.fromProvider} to ${event.toProvider}`);
-  console.log(`Reason: ${event.reason}`);
-  
-  // Send alert, update metrics, etc.
-  await sendAlert(event);
-});
-```
-
-### Configure Notifications
-
-Set in `.env`:
-
-```env
-NOTIFICATION_ENABLED=true
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN
-```
-
-Automatically sends notifications on failover/recovery.
-
-### Run Tests
-
-```bash
-# All tests
-npm test
-
-# Chaos tests only
-npm run test:chaos
-
-# Specific test file
-npm test -- schema-validator
-```
-
-### Type Check Without Compiling
-
-```bash
-npx tsc --noEmit
-```
-
-## Configuration Quick Reference
-
-| Setting | Default | Purpose |
-|---------|---------|---------|
-| `FPL_API_BASE_URL` | `https://fantasy.premierleague.com/api` | Primary API endpoint |
-| `CANARY_PROBE_INTERVAL_MS` | `30000` | Health check every 30s |
-| `CANARY_PROBE_TIMEOUT_MS` | `3000` | Timeout after 3s |
-| `CANARY_HEALTH_CHECK_THRESHOLD_MS` | `3000` | Flag response >3s |
-| `CANARY_CONSECUTIVE_HEALTHY_FOR_RECOVERY` | `5` | Need 5 min healthy to recover |
-| `BACKUP_API_URL` | (required) | Secondary provider |
-| `FALLBACK_CACHE_PATH` | `/tmp/fpl-fallback-cache.json` | Cache location |
-| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `NOTIFICATION_ENABLED` | `true` | Enable webhook notifications |
+**Q: Can I use it on multiple gameweeks?**  
+A: Yes, each page can have its own ticker with different gameweekId.
 
 ## Troubleshooting
 
-### Service won't start
+**Events not showing?**
+1. Check if auth token exists: `localStorage.getItem('authToken')`
+2. Open DevTools Network tab, look for WebSocket connection
+3. Check console for errors
+4. Verify gameweekId is correct
 
-```bash
-# Check Node.js version
-node --version  # Should be v14+
+**Animations stuttering?**
+1. Reduce `maxVisibleEvents` to 3
+2. Close other browser tabs
+3. Check GPU acceleration enabled
 
-# Check for compilation errors
-npx tsc --noEmit
-
-# Run with debug logging
-LOG_LEVEL=debug node dist/index.js
-```
-
-### Primary API not failing over
-
-```bash
-# Check if circuit breaker is open
-const status = monitor.getStatus();
-console.log(status.canary.circuitBreaker.state); // Should be OPEN
-
-# Check degradation indicators
-console.log(status.canary.metrics.degradationIndicators);
-
-# Manually trigger failover for testing
-monitor.canary.circuitBreaker.testRecovery();
-```
-
-### Notifications not sending
-
-```bash
-# Verify webhook URL
-echo $DISCORD_WEBHOOK_URL
-
-# Check Discord/Slack permissions
-# Test webhook manually:
-curl -X POST $DISCORD_WEBHOOK_URL \
-  -H "Content-Type: application/json" \
-  -d '{"content":"test"}'
-
-# Enable debug logging
-LOG_LEVEL=debug node dist/index.js
-```
-
-### Cache not updating
-
-```bash
-# Verify cache path is writable
-touch /tmp/fpl-fallback-cache.json
-
-# Check file permissions
-ls -la /tmp/fpl-fallback-cache.json
-
-# Ensure backup API is accessible
-curl https://your-backup-api.com/bootstrap-static/
-```
-
-## Development Workflow
-
-### Watch Mode
-
-```bash
-# Recompile on file changes
-npx tsc --watch
-```
-
-In another terminal:
-
-```bash
-# Restart service on changes
-nodemon dist/index.js
-```
-
-### Adding Features
-
-1. Define types in `src/types.ts`
-2. Implement logic in appropriate component
-3. Add tests to `src/__tests__/`
-4. Compile: `npx tsc`
-5. Test: `npm test`
-
-### Debugging
-
-```bash
-# Node inspector
-node --inspect dist/index.js
-
-# Chrome DevTools
-# Visit: chrome://inspect
-
-# Direct logging
-const { logger } = require('./dist/logger');
-logger.debug({ data }, 'Debug message');
-```
-
-## Performance Tips
-
-### Reduce Memory Usage
-
-```env
-# Decrease history sizes (in health-canary.ts)
-# Change: this.responseTimeHistory.splice(0, 100)
-# To: this.responseTimeHistory.splice(0, 50)
-
-# Fewer degradation indicators
-# Change: this.degradationIndicators.splice(0, 50)
-# To: this.degradationIndicators.splice(0, 25)
-```
-
-### Reduce CPU Usage
-
-```env
-# Increase probe interval (less frequent checks)
-CANARY_PROBE_INTERVAL_MS=60000  # 60 seconds
-
-# Increase health threshold
-CANARY_HEALTH_CHECK_THRESHOLD_MS=5000  # 5 seconds
-```
-
-### Reduce Disk I/O
-
-```env
-# Disable cache updates (backup API only)
-# Or increase cache update interval
-
-# Move cache to RAM disk (Linux)
-FALLBACK_CACHE_PATH=/mnt/ramdisk/fpl-cache.json
-```
-
-## Deployment Checklist
-
-- [ ] Compile TypeScript: `npx tsc`
-- [ ] Run tests: `npm test`
-- [ ] Configure `.env` for production
-- [ ] Set up backup API provider
-- [ ] Configure Discord/Slack webhooks
-- [ ] Set up log aggregation
-- [ ] Test in staging environment
-- [ ] Monitor initial rollout
-- [ ] Set up alerting on failovers
+**Connection keeps dropping?**
+1. Check internet connection
+2. Verify backend WebSocket server running
+3. Check firewall settings
 
 ## Next Steps
 
-1. **Read Architecture**: See `ARCHITECTURE.md` for design details
-2. **Read API Reference**: See `API.md` for complete API documentation
-3. **Read Integration Guide**: See `INTEGRATION.md` for real-world integration patterns
-4. **Run Tests**: `npm run test:chaos` to verify failover behavior
-5. **Deploy**: Follow `DEPLOYMENT.md` for production rollout
+1. ✅ Add to a gameweek/match page
+2. ✅ Test with live gameweek events
+3. ✅ Customize position and timing
+4. ✅ Add custom CSS styling if needed
+5. ✅ Deploy to production
 
 ## Support
 
 For issues or questions:
-
-1. Check logs: `tail -f app.log`
-2. Review recent degradation indicators
-3. Check circuit breaker state
-4. Verify backup API accessibility
-5. Test with chaos tests: `npm run test:chaos`
-
-## Key Concepts
-
-**Circuit Breaker**: 
-- CLOSED = Primary API healthy
-- OPEN = Primary degraded, using backup
-- HALF_OPEN = Testing recovery
-
-**Failover**: Automatic switch to backup when primary fails
-
-**Recovery**: Automatic switch back to primary after stable period
-
-**Health Probe**: Request to primary API every 30s to check health
-
-**Degradation Indicator**: Signal that primary API is failing (429, timeout, schema change, 502, etc.)
+- Check `EVENT_TICKER_IMPLEMENTATION.md` for detailed docs
+- Review test file for usage examples
+- Check `IMPLEMENTATION_CHECKLIST.md` for complete feature list
 
 ---
 
-For detailed documentation, see:
-- `README.md` - Overview and features
-- `ARCHITECTURE.md` - System design
-- `API.md` - API reference
-- `INTEGRATION.md` - Integration patterns
-- `DEPLOYMENT.md` - Deployment guide
+**That's it!** You now have a production-ready live event ticker. Events will stream in real-time as they happen during matches. 🚀

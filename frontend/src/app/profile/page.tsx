@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { Squad, League, GameweekHistoryEntry } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { SignInMethods } from "@/components/auth/SignInMethods";
+import { PrivacySettings } from "@/components/profile/PrivacySettings";
 import { ActiveSessionsManager } from "@/components/profile/ActiveSessionsManager";
 import { MultiChainWalletLinker } from "@/components/profile/MultiChainWalletLinker";
 import {
